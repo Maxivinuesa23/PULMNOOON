@@ -1,0 +1,2 @@
+temp_storage/outputs
+temp_storage/uploads
