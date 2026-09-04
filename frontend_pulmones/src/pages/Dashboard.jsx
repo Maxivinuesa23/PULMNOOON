@@ -132,7 +132,10 @@ export default function Dashboard() {
               <Metric label="Cortes con hallazgos" value={stats?.slicesAfectados ?? "—"} />
             </div>
             <div className="viewer-grid">
-              <div className="viewer-card"><div className="card-heading"><div><span className="section-kicker">RECONSTRUCCIÓN</span><h2>Vista volumétrica 3D</h2></div><span className="live-tag"><span /> Interactivo</span></div><MeshViewer detections={analysisResults.detections || stats?.detecciones || []} /></div>
+              <div className="viewer-card"><div className="card-heading"><div><span className="section-kicker">RECONSTRUCCIÓN</span><h2>Vista volumétrica 3D</h2></div><span className="live-tag"><span /> Interactivo</span></div><MeshViewer 
+  model3dUrl={analysisResults.model3dUrl} 
+  detections={analysisResults.detections || stats?.detecciones || []} 
+/></div>
               <div className="viewer-card"><div className="card-heading"><div><span className="section-kicker">SERIE AXIAL</span><h2>Cortes 2D marcados</h2></div><span className="count-tag">{analysisResults.slices2dUrls?.length || 0} cortes</span></div><SliceViewer slices={analysisResults.slices2dUrls} /></div>
             </div>
             {analysisResults.conclusion && <div className="conclusion-card"><div className="conclusion-icon"><SparklesIcon /></div><div><span className="section-kicker">VALIDACIÓN CLÍNICA DE REFERENCIA</span><h2>Conclusión asistida</h2><p>{analysisResults.conclusion}</p>{analysisResults.recomendaciones?.length > 0 && <ul>{analysisResults.recomendaciones.map((item) => <li key={item}>{item}</li>)}</ul>}<small><ExclamationTriangleIcon /> Esta herramienta es orientativa y no sustituye la evaluación de un profesional.</small></div></div>}
