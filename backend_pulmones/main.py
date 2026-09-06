@@ -9,18 +9,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 # Importamos las rutas que creamos en api/routes.py
 from api.routes import router
 
-app = FastAPI(title="API Análisis Pulmonar con IA")
+app = FastAPI(title="Pulmonary Nodule AI Backend")
 
-# Configuración de CORS para permitir que React se conecte
+# Permitir orígenes cruzados para Vercel
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, pon la URL de tu frontend
+    allow_origins=[
+        "https://pulmooon.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "*"  # Permite pruebas y conexiones directas
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Incluimos los endpoints bajo el prefijo /api
 app.include_router(router, prefix="/api")
 
 # Crear carpetas de runtime automáticamente al iniciar el servidor.

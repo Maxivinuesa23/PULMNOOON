@@ -9,12 +9,14 @@ from services.image_service import process_tomography_zip
 from services.ai_service import run_inference
 from services.mesh_service import generate_3d_mesh
 from services.gemini_service import build_conclusion, verify_detections, apply_second_opinion
-from core.config import PUBLIC_API_URL, UPLOAD_DIR, OUTPUT_DIR
+from core.config import UPLOAD_DIR, OUTPUT_DIR
 
 router = APIRouter()
 tasks_db = {}
 logger = logging.getLogger("cancer_detector")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# Obtener host público (por defecto la URL HTTPS de Render)
+BASE_HOST_URL = os.getenv("BACKEND_URL", "https://pulmnooon.onrender.com")
 
 def process_workflow(task_id: str, file_path: str):
     tasks_db[task_id] = {"status": "processing"}
@@ -58,11 +60,16 @@ def process_workflow(task_id: str, file_path: str):
         generate_3d_mesh(volume_3d, task_output_folder, stats["detecciones"], volume_metadata)
         extracted_data_folder = os.path.join(task_output_folder, "extracted_data")
         shutil.rmtree(extracted_data_folder, ignore_errors=True)
-        mesh_path = os.path.join(task_output_folder, "mesh.glb")
+        mesh_path = os.path.join(task_output_folder, "mesh.gltf")
+        model_filename = "mesh.gltf"
+        if not os.path.exists(mesh_path):
+            mesh_path = os.path.join(task_output_folder, "mesh.glb")
+            model_filename = "mesh.glb"
         logger.info("[TAREA %s] Malla=%s existe=%s bytes=%d", task_id, mesh_path, os.path.exists(mesh_path), os.path.getsize(mesh_path) if os.path.exists(mesh_path) else 0)
-        
-        base_url = f"{PUBLIC_API_URL}/api/download"
-        slices_urls = [f"{base_url}/{task_id}/{fname}" for fname in slice_filenames]
+
+        base_download_url = f"{BASE_HOST_URL}/api/download/{task_id}"
+        slices_urls = [f"{base_download_url}/{fname}" for fname in slice_filenames]
+        model_3d_url = f"{base_download_url}/{model_filename}" if os.path.exists(mesh_path) else None
         
         tasks_db[task_id] = {
             "status": "completed",
@@ -71,7 +78,7 @@ def process_workflow(task_id: str, file_path: str):
                 "tumorDetected": tumor_detected,
                 "confidence": confidence,
                 "stats": stats,
-                "model3dUrl": f"{base_url}/{task_id}/mesh.glb",
+                "model3dUrl": model_3d_url,
                 "slices2dUrls": slices_urls,
                 "detections": stats["detecciones"],
                 "geminiEnabled": bool(os.getenv("GEMINI_API_KEY"))
