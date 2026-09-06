@@ -6,20 +6,22 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-# Importamos las rutas que creamos en api/routes.py
+# Importamos las rutas desde api/routes.py
 from api.routes import router
 
 app = FastAPI(title="Pulmonary Nodule AI Backend")
 
-# Permitir orígenes cruzados para Vercel
+# Origenes permitidos sin comodines conflictivos con allow_credentials
+origins = [
+    "https://pulmooon.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://pulmooon.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "*"  # Permite pruebas y conexiones directas
-    ],
+    allow_origins=origins,
+    allow_origin_regex=r"https://pulmooon.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,7 +29,10 @@ app.add_middleware(
 
 app.include_router(router, prefix="/api")
 
-# Crear carpetas de runtime automáticamente al iniciar el servidor.
-# Por defecto viven en el directorio temporal del sistema, no dentro del repo.
+@app.get("/")
+def read_root():
+    return {"status": "online", "service": "Pulmonary Nodule AI Backend"}
+
+# Crear carpetas de runtime
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
