@@ -8,7 +8,7 @@ import time
 from services.image_service import process_tomography_zip
 from services.ai_service import run_inference
 from services.mesh_service import generate_3d_mesh
-from services.gemini_service import build_conclusion, verify_detections
+from services.gemini_service import build_conclusion, verify_detections, apply_second_opinion
 from core.config import PUBLIC_API_URL, UPLOAD_DIR, OUTPUT_DIR
 
 router = APIRouter()
@@ -22,6 +22,7 @@ def process_workflow(task_id: str, file_path: str):
     
     task_output_folder = os.path.join(OUTPUT_DIR, task_id)
     os.makedirs(task_output_folder, exist_ok=True)
+    completed = False
     
     try:
         # 1. Extraer ZIP y obtener volumen 3D y lista de cortes
@@ -47,11 +48,16 @@ def process_workflow(task_id: str, file_path: str):
                 / len(positive_results),
                 1,
             ) if positive_results else 0.0
-        mesh_detections = [
-            d for d in stats["detecciones"]
-            if (d.get("gemini") or {}).get("classification") != "table_artifact"
-        ]
-        generate_3d_mesh(volume_3d, task_output_folder, mesh_detections, volume_metadata)
+
+        # La segunda opinion de Gemini tambien debe reflejarse en el resumen
+        # (area, volumen, corte critico, slices afectados), no solo en
+        # tumor_detected/confidence de arriba. Marca ademas cada deteccion
+        # con "descartado_por_gemini" para que el mesh 3D las distinga.
+        stats = apply_second_opinion(stats["detecciones"], stats)
+
+        generate_3d_mesh(volume_3d, task_output_folder, stats["detecciones"], volume_metadata)
+        extracted_data_folder = os.path.join(task_output_folder, "extracted_data")
+        shutil.rmtree(extracted_data_folder, ignore_errors=True)
         mesh_path = os.path.join(task_output_folder, "mesh.glb")
         logger.info("[TAREA %s] Malla=%s existe=%s bytes=%d", task_id, mesh_path, os.path.exists(mesh_path), os.path.getsize(mesh_path) if os.path.exists(mesh_path) else 0)
         
@@ -71,23 +77,35 @@ def process_workflow(task_id: str, file_path: str):
                 "geminiEnabled": bool(os.getenv("GEMINI_API_KEY"))
             }
         }
+        completed = True
         logger.info("[TAREA %s] Pipeline completado", task_id)
         
     except Exception as e:
         logger.exception("[TAREA %s] Error crítico", task_id)
         tasks_db[task_id] = {"status": "error", "message": str(e)}
+    finally:
+        # El ZIP original sólo es necesario durante el procesamiento.
+        try:
+            os.remove(file_path)
+        except FileNotFoundError:
+            pass
+        if not completed:
+            shutil.rmtree(task_output_folder, ignore_errors=True)
 
 @router.post("/upload")
 async def upload_tomography(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     cutoff = time.time() - 3600
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for upload in UPLOAD_DIR.iterdir():
+        if upload.is_file() and upload.stat().st_mtime < cutoff:
+            upload.unlink(missing_ok=True)
     for folder in OUTPUT_DIR.iterdir() if hasattr(OUTPUT_DIR, "iterdir") else []:
         if folder.is_dir() and folder.stat().st_mtime < cutoff:
             shutil.rmtree(folder, ignore_errors=True)
     task_id = str(uuid.uuid4())
     file_extension = os.path.splitext(file.filename or "")[1].lower() or ".zip"
-    file_path = os.path.join(UPLOAD_DIR, f"{task_id}.{file_extension}")
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    
+    file_path = os.path.join(UPLOAD_DIR, f"{task_id}{file_extension}")
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     logger.info("[UPLOAD %s] filename=%s guardado=%s bytes=%d", task_id, file.filename, file_path, os.path.getsize(file_path))
@@ -125,6 +143,10 @@ def validate_with_gemini(task_id: str):
     elif classifications and all(value in {"table_artifact", "vessel", "airway", "normal"} for value in classifications):
         result["tumorDetected"] = False
     result["geminiValidated"] = True
+    # Mantener el resumen numerico (stats) consistente con la revalidacion
+    # manual, igual que en el pipeline automatico.
+    if "stats" in result:
+        result["stats"] = apply_second_opinion(detections, result["stats"])
     result.update(build_conclusion(detections))
     return result
 

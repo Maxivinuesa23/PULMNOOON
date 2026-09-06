@@ -23,6 +23,7 @@ app.add_middleware(
 # Incluimos los endpoints bajo el prefijo /api
 app.include_router(router, prefix="/api")
 
-# Crear carpetas temporales automáticamente al iniciar el servidor
+# Crear carpetas de runtime automáticamente al iniciar el servidor.
+# Por defecto viven en el directorio temporal del sistema, no dentro del repo.
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

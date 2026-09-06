@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import torch
 from PIL import Image, ImageDraw
@@ -6,17 +8,31 @@ from scipy import ndimage
 from ai_model.architecture import MiniUNet
 from core.config import MODEL_PATH
 
+logger = logging.getLogger("cancer_detector.ai")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 modelo_ia = MiniUNet().to(device)
 model_loaded = False
 
 if MODEL_PATH.exists():
-    state = torch.load(MODEL_PATH, map_location=device)
-    if isinstance(state, dict) and "state_dict" in state:
-        state = state["state_dict"]
-    modelo_ia.load_state_dict(state)
-    model_loaded = True
+    try:
+        state = torch.load(MODEL_PATH, map_location=device)
+        if isinstance(state, dict) and "state_dict" in state:
+            state = state["state_dict"]
+        modelo_ia.load_state_dict(state)
+        model_loaded = True
+        logger.info("Pesos cargados correctamente desde %s", MODEL_PATH)
+    except (RuntimeError, KeyError, OSError, ValueError) as error:
+        # Un checkpoint corrupto o incompatible no debe tumbar el servicio:
+        # seguimos con el modelo sin entrenar (model_loaded=False) para que
+        # el resto del pipeline (heuristicas + Gemini) siga funcionando y
+        # el problema quede visible en la respuesta ("modeloCargado": false)
+        # en vez de como un 500 al arrancar.
+        logger.warning("No se pudieron cargar los pesos desde %s: %s", MODEL_PATH, error)
+        model_loaded = False
+else:
+    logger.warning("No se encontro el archivo de pesos en %s", MODEL_PATH)
+
 modelo_ia.eval()
 
 

@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+# Evitar prompts interactivos y buffer en logs
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Instalar dependencias del sistema requeridas para OpenCV y procesamiento de imagen
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalar PyTorch versión CPU (pesa ~180MB en lugar de 2GB)
+RUN pip install --no-cache-dir torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Copiar requerimientos e instalar el resto de librerías
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar el código fuente y los modelos
+COPY . .
+
+# Exponer el puerto predeterminado
+EXPOSE 8000
+
+# Ejecutar Uvicorn en 0.0.0.0 y tomar el puerto asignado por Render
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

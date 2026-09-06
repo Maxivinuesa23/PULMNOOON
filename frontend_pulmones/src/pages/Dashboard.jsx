@@ -6,22 +6,45 @@ import {
   ClockIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
-  ShieldCheckIcon,
+  LinkIcon,
+  PlayCircleIcon,
   SparklesIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import UploadZone from "../components/UploadZone";
 import SliceViewer from "../components/SliceViewer";
 import MeshViewer from "../components/MeshViewer";
 import Loader from "../components/Loader";
-import { checkTaskStatus, validateWithGemini } from "../services/api";
+import { checkTaskStatus } from "../services/api";
 
-const navItems = ["Nuevo análisis", "Estudios recientes", "Guía clínica"];
+const TEST_STUDIES_DRIVE_URL = "https://drive.google.com/drive/folders/1PBv0RC5Oi2tIJw9jJRUxej-6y_DTaQlc?usp=sharing";
+const DEMO_VIDEO_URL = "https://youtu.be/zNWA8YczCC8?si=A_AbSrechom3vk6Q";
+
+function getVideoSource(url) {
+  if (!url || url.includes("REEMPLAZAR")) return null;
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname === "youtu.be") {
+      return { type: "youtube", src: `https://www.youtube.com/embed/${parsedUrl.pathname.slice(1)}` };
+    }
+    if (parsedUrl.hostname.endsWith("youtube.com")) {
+      const videoId = parsedUrl.searchParams.get("v");
+      return videoId ? { type: "youtube", src: `https://www.youtube.com/embed/${videoId}` } : null;
+    }
+    return { type: "file", src: parsedUrl.toString() };
+  } catch {
+    return null;
+  }
+}
 
 export default function Dashboard() {
   const [appState, setAppState] = useState("upload");
+  const [activeView, setActiveView] = useState("upload");
   const [analysisResults, setAnalysisResults] = useState(null);
   const [processingError, setProcessingError] = useState("");
   const [geminiState, setGeminiState] = useState("");
+  const [showImportantNotice, setShowImportantNotice] = useState(true);
+  const videoSource = getVideoSource(DEMO_VIDEO_URL);
 
   const handleUploadSuccess = async (responseData) => {
     setAppState("processing");
@@ -63,16 +86,9 @@ export default function Dashboard() {
     setGeminiState("");
   };
 
-  const handleGeminiValidation = async () => {
-    if (!analysisResults?.taskId) return setGeminiState("No hay identificador de análisis");
-    setGeminiState("Analizando...");
-    try {
-      const result = await validateWithGemini(analysisResults.taskId);
-      setAnalysisResults((current) => ({ ...current, ...result }));
-      setGeminiState("Validación completada");
-    } catch (error) {
-      setGeminiState(`Error: ${error.message}`);
-    }
+  const handleGoHome = () => {
+    handleReset();
+    setActiveView("upload");
   };
 
   const detected = Boolean(analysisResults?.tumorDetected);
@@ -81,19 +97,20 @@ export default function Dashboard() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">
+        <button type="button" className="brand brand-button" onClick={handleGoHome} aria-label="Volver al menú principal">
           <div className="brand-mark"><BeakerIcon /></div>
           <div><strong>Pulmo<span>Scan</span></strong><small>Asistencia radiológica</small></div>
-        </div>
-        <nav aria-label="Navegación principal">
-          {navItems.map((item, index) => <button key={item} className={index === 0 ? "nav-link active" : "nav-link"}>{item}</button>)}
+        </button>
+        <nav className="view-switcher" aria-label="Secciones principales">
+          <button type="button" className={activeView === "upload" ? "view-tab active" : "view-tab"} onClick={() => setActiveView("upload")}>Cargar estudio</button>
+          <button type="button" className={activeView === "info" ? "view-tab active" : "view-tab"} onClick={() => setActiveView("info")}>Ver información</button>
+          <button type="button" className={activeView === "about" ? "view-tab active" : "view-tab"} onClick={() => setActiveView("about")}>Quiénes somos</button>
         </nav>
-        <div className="secure-badge"><ShieldCheckIcon /> Entorno seguro</div>
       </header>
 
       <main className="page-content">
         <div className="eyebrow"><span className="status-dot" /> PLATAFORMA DE ANÁLISIS DICOM <span className="eyebrow-line" /></div>
-        {appState === "upload" && (
+        {activeView === "upload" && appState === "upload" && (
           <section className="welcome-layout">
             <div className="welcome-copy">
               <h1>Una segunda mirada,<br /><em>más precisa.</em></h1>
@@ -103,7 +120,7 @@ export default function Dashboard() {
             <UploadZone onUploadSuccess={handleUploadSuccess} />
           </section>
         )}
-        {appState === "upload" && (
+        {activeView === "info" && (
           <section className="purpose-hero" aria-labelledby="purpose-title">
             <div className="purpose-glow" />
             <div className="purpose-card-icon"><InformationCircleIcon /></div>
@@ -116,13 +133,63 @@ export default function Dashboard() {
             <div className="purpose-visual" aria-hidden="true"><div className="scan-ring ring-one" /><div className="scan-ring ring-two" /><div className="scan-core"><span /><span /><span /></div><div className="scan-line" /></div>
           </section>
         )}
+        {activeView === "info" && (
+          <section className="resources-section" aria-labelledby="resources-title">
+            <div className="resources-heading">
+              <div>
+                <span className="section-kicker">CENTRO DE AYUDA</span>
+                <h2 id="resources-title">Probá la aplicación con estudios reales</h2>
+                <p>Descargá una serie de prueba o mirá el video para conocer el flujo completo.</p>
+              </div>
+              <span className="resources-label">2 recursos</span>
+            </div>
+            <div className="resource-grid">
+              <a className="resource-card" href={TEST_STUDIES_DRIVE_URL} target="_blank" rel="noreferrer">
+                <span className="resource-icon"><LinkIcon /></span>
+                <span className="resource-card-content">
+                  <strong>Series de tomografías para probar</strong>
+                  <span>Descargá estudios desde nuestro Drive y subilos en formato .ZIP.</span>
+                  <small>https://drive.google.com/drive/folders/1PBv0RC5Oi2tIJw9jJRUxej-6y_DTaQlc?usp=sharing <span>↗</span></small>
+                </span>
+              </a>
+              <a className="resource-card" href={DEMO_VIDEO_URL} target="_blank" rel="noreferrer">
+                <span className="resource-icon video"><PlayCircleIcon /></span>
+                <span className="resource-card-content">
+                  <strong>Cómo funciona PulmoScan</strong>
+                  <span>Video corto con el paso a paso para cargar y revisar un estudio.</span>
+                  <small>https://youtu.be/bnxEr2vKbsc?si=kRDOoTKiRwf9qH1<span>↗</span></small>
+                </span>
+              </a>
+            </div>
+            <div className="tcia-note">
+              <InformationCircleIcon />
+              <span>Los estudios de prueba provienen de <a href="https://www.cancerimagingarchive.net/" target="_blank" rel="noreferrer">The Cancer Imaging Archive (TCIA)</a>. También podés obtener otras series directamente desde su archivo.</span>
+            </div>
+            {videoSource && (
+              <div className="video-preview">
+                {videoSource.type === "youtube" ? (
+                  <iframe src={videoSource.src} title="Demostración de PulmoScan" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                ) : (
+                  <video src={videoSource.src} controls preload="metadata">Tu navegador no puede reproducir este video.</video>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+        {activeView === "info" && (
+          <section className="important-notice" aria-labelledby="important-title">
+            <div className="notice-icon"><ExclamationTriangleIcon /></div>
+            <div><strong id="important-title">Importante antes de usar</strong><p>PulmoScan es una herramienta de asistencia. Los resultados deben ser revisados e interpretados por personal médico cualificado.</p></div>
+          </section>
+        )}
+        {activeView === "about" && <AboutProject />}
         {processingError && <div className="error-banner"><ExclamationTriangleIcon /> <span>{processingError}</span><button onClick={() => setProcessingError("")}>Cerrar</button></div>}
-        {appState === "processing" && <Loader />}
-        {appState === "results" && analysisResults && (
+        {activeView === "upload" && appState === "processing" && <Loader />}
+        {activeView === "upload" && appState === "results" && analysisResults && (
           <section className="results-page">
             <div className="results-heading">
               <div><button className="back-link" onClick={handleReset}>← Nuevo análisis</button><h1>Resumen del estudio</h1><p>Revisión asistida por IA · Estudio completado</p></div>
-              <div className="result-actions"><span className={detected ? "finding-badge danger" : "finding-badge safe"}>{detected ? "Anomalía detectada" : "Sin anomalías visibles"}</span><button className="button secondary" onClick={handleGeminiValidation} disabled={geminiState === "Analizando..."}><SparklesIcon /> {geminiState === "Analizando..." ? "Validando..." : "Validar con Gemini"}</button></div>
+              <div className="result-actions"><span className={detected ? "finding-badge danger" : "finding-badge safe"}>{detected ? "Anomalía detectada" : "Sin anomalías visibles"}</span><span className="future-feature-tooltip" data-tooltip="Implementación a futuro" tabIndex="0"><button className="button gemini-button" type="button" disabled aria-disabled="true"><SparklesIcon /> Obtener segunda opinión</button></span></div>
             </div>
             {geminiState && <div className="validation-note"><InformationCircleIcon /> {geminiState}</div>}
             <div className="metric-grid">
@@ -142,8 +209,80 @@ export default function Dashboard() {
           </section>
         )}
       </main>
-      <footer><span>© 2025 PulmoScan</span><span>Los resultados deben ser interpretados por personal médico cualificado.</span><span>v1.0 · <a href="#privacy">Privacidad</a></span></footer>
+      {showImportantNotice && activeView === "upload" && appState === "upload" && (
+        <div className="notice-backdrop" role="presentation">
+          <section className="notice-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <button type="button" className="modal-close" aria-label="Cerrar aviso importante" onClick={() => setShowImportantNotice(false)}><XMarkIcon /></button>
+            <div className="modal-icon"><ExclamationTriangleIcon /></div>
+            <span className="section-kicker">ANTES DE COMENZAR</span>
+            <h2 id="modal-title">Importante</h2>
+            <p>Leé esta información antes de cargar un estudio.</p>
+            <div className="modal-rule" />
+            <strong>Una herramienta de asistencia clínica</strong>
+            <small>PulmoScan orienta la revisión de imágenes, pero no reemplaza el criterio ni el diagnóstico de un profesional de la salud.</small>
+            <div className="modal-actions">
+              <button type="button" className="button modal-secondary" onClick={() => { setShowImportantNotice(false); setActiveView("info"); }}>Leer información</button>
+              <button type="button" className="button primary modal-primary" onClick={() => setShowImportantNotice(false)}>Entendido, continuar</button>
+            </div>
+          </section>
+        </div>
+      )}
+      <footer><span>© 2026 PulmoScan</span><span>Los resultados deben ser interpretados por personal médico cualificado.</span><span>v1.0 · <a href="#privacy">Privacidad</a></span></footer>
     </div>
+  );
+}
+
+function AboutProject() {
+  return (
+    <section className="about-page" aria-labelledby="about-title">
+      <header className="about-hero">
+        <span className="section-kicker">SOBRE EL PROYECTO</span>
+        <h1 id="about-title">Detección y Segmentación 3D de <em>Nódulos Pulmonares</em></h1>
+        <p>Somos <strong>Máximo Vinuesa</strong> y <strong>Tomás Picco</strong>, estudiantes avanzados de Ingeniería en Sistemas de Información en la Universidad Nacional de Villa Mercedes (UNViMe).</p>
+        <p>Desarrollamos esta plataforma para asistir la detección temprana del cáncer de pulmón mediante el análisis automatizado de imágenes de tomografía computarizada (CT).</p>
+      </header>
+
+      <div className="about-grid">
+        <article className="about-card about-wide">
+          <span className="section-kicker">PROPÓSITO E INNOVACIÓN</span>
+          <h2>Una segunda mirada para la atención clínica</h2>
+          <p>La detección temprana de lesiones nodulares en el tórax es determinante para la supervivencia del paciente. Sin embargo, analizar cientos de cortes axiales demanda tiempo y puede dificultar la identificación de nódulos milimétricos o su diferenciación frente a estructuras vasculares.</p>
+          <p>Combinamos visión por computadora, aprendizaje profundo (<em>Deep Learning</em>) y reconstrucción tridimensional para ofrecer una segunda mirada clara y visual sobre cada estudio.</p>
+        </article>
+        <article className="about-card">
+          <span className="section-kicker">01 · INGESTA</span>
+          <h2>De DICOM a cortes optimizados</h2>
+          <p>El profesional carga un archivo <code>.zip</code> con los cortes originales. El sistema los convierte, normaliza sus valores en Unidades Hounsfield (HU) y los prepara con una ventana optimizada para observar el pulmón.</p>
+        </article>
+        <article className="about-card">
+          <span className="section-kicker">02 · INTELIGENCIA ARTIFICIAL</span>
+          <h2>Modelo clínico U-Net</h2>
+          <p>Una red neuronal U-Net, entrenada con datos del consorcio internacional <strong>LIDC-IDRI</strong>, analiza cada corte. Aísla el pulmón y marca las regiones nodulares sospechosas.</p>
+        </article>
+        <article className="about-card">
+          <span className="section-kicker">03 · RECONSTRUCCIÓN</span>
+          <h2>Volumen anatómico interactivo</h2>
+          <p>Los cortes se reúnen en un volumen 3D. Luego, el algoritmo <em>Marching Cubes</em> genera un modelo anatómico interactivo en formato GLTF para explorarlo desde el navegador.</p>
+        </article>
+        <article className="about-card about-wide">
+          <span className="section-kicker">CARACTERÍSTICAS DEL SISTEMA</span>
+          <h2>Resultados para explorar y comprender</h2>
+          <div className="about-feature-list">
+            <div><strong>Visor 2D de cortes axiales</strong><span>Recorrido dinámico sobre el eje Z con delimitación automática de zonas sospechosas.</span></div>
+            <div><strong>Métricas clínicas cuantitativas</strong><span>Cortes afectados, corte crítico, área máxima (mm²), volumen proyectado (mm³), diámetro aproximado (mm) e índice de confianza.</span></div>
+            <div><strong>Visor 3D interactivo dual</strong><span>Visualización WebGL de la morfología pulmonar y localización espacial del nódulo. El modo pulmón completo se encuentra en fase beta.</span></div>
+          </div>
+        </article>
+        <article className="about-card about-wide architecture-card">
+          <span className="section-kicker">ARQUITECTURA TECNOLÓGICA</span>
+          <h2>Una plataforma integral, de punta a punta</h2>
+          <div className="stack-grid">
+            <div><strong>Backend</strong><span>Python · FastAPI · Background Tasks · NumPy · SciPy · PyDICOM · Trimesh · PyTorch · GPU/CPU</span></div>
+            <div><strong>Frontend</strong><span>React · Vite · Tailwind CSS · Three.js · React Three Fiber / Drei · WebGL</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
   );
 }
 

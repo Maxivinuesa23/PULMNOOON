@@ -59,7 +59,11 @@ def generate_3d_mesh(volume_3d: np.ndarray, output_folder: str, detections=None,
 
     lung = _make_surface(lung_mask, spacing)
     lung.visual.vertex_colors = [200, 220, 240, 140]  # Translúcido tipo cristal médico
-    scene = trimesh.Scene([lung])
+    scene = trimesh.Scene()
+    # Nombre explicito: el frontend lo usa para aplicarle el material de
+    # vidrio SOLO a la superficie pulmonar y dejar los marcadores tal cual
+    # vienen coloreados desde aca (ver MeshViewer.jsx).
+    scene.add_geometry(lung, geom_name="lung_surface", node_name="lung_surface")
 
     # Dimensiones de la matriz para escalado de coordenadas de detecciones
     depth, height, width = volume_3d.shape
@@ -68,8 +72,15 @@ def generate_3d_mesh(volume_3d: np.ndarray, output_folder: str, detections=None,
     for detection in (detections or [])[:15]:
         try:
             index = int(detection["slice"])
-            z = float(z_positions[index]) if index < len(z_positions) else index * spacing[0]
-            
+            # IMPORTANTE: marching_cubes genero la malla asumiendo espaciado
+            # UNIFORME entre cortes (un solo valor spacing[0]). Si usamos aca
+            # la posicion real del corte (z_positions, que puede no ser
+            # uniforme por cortes faltantes o gaps), el marcador se va
+            # desalineando de la malla a medida que aumenta la profundidad.
+            # Para que el marcador quede siempre en el mismo sistema de
+            # coordenadas que la malla, usamos la misma grilla uniforme.
+            z = index * spacing[0]
+
             # Mapear coordenadas relativas o absolutas de la caja delimitadora (bounding box)
             x_min = float(detection["x"])
             y_min = float(detection["y"])
@@ -85,10 +96,25 @@ def generate_3d_mesh(volume_3d: np.ndarray, output_folder: str, detections=None,
             
             # Aplicar traslación exacta en el espacio de Three.js (Z, Y, X)
             marker.apply_translation((z, y_center, x_center))
-            marker.visual.vertex_colors = [239, 68, 68, 255]  # Rojo clínico destacado
-            scene.add_geometry(marker)
+
+            # 3. Color segun la segunda opinion de Gemini y la confianza del
+            # detector, para que la vista 3D refleje que tan seria es cada
+            # marca en vez de mostrar todo con el mismo rojo "confirmado".
+            ruled_out = bool(detection.get("descartado_por_gemini"))
+            if ruled_out:
+                # Gemini determino que esto es vaso/via aerea/artefacto/normal:
+                # se muestra atenuada y gris, visible pero claramente distinta,
+                # nunca oculta del todo (mantiene trazabilidad).
+                marker.visual.vertex_colors = [148, 163, 184, 90]
+            else:
+                score = float(detection.get("score", 50))
+                alpha = int(np.clip(120 + (score / 100.0) * 135, 120, 255))
+                marker.visual.vertex_colors = [239, 68, 68, alpha]  # Rojo clinico
+
+            marker_name = f"anomaly_marker_{index}_{'ruled_out' if ruled_out else 'active'}"
+            scene.add_geometry(marker, geom_name=marker_name, node_name=marker_name)
         except Exception as e:
-            logger.warning(f"Error procesando una detección para el 3D: {e}")
+            logger.warning(f"Error procesando una deteccion para el 3D: {e}")
 
     output_path = os.path.join(output_folder, "mesh.glb")
     scene.export(output_path, file_type="glb")
