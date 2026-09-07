@@ -1,8 +1,14 @@
 import axios from 'axios';
 
-// Permitir desarrollo local y producción sin cambiar el código manualmente.
-export const API_BASE_URL = import.meta.env.VITE_API_URL
-  || (import.meta.env.DEV ? 'http://localhost:8001/api' : 'https://pulmnooon.onrender.com/api');
+// Permitir desarrollo local y producción de forma automática y segura.
+// Si estamos en un dominio web real (producción), apunta a Render; si estamos en la PC, a localhost.
+const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+
+export const API_BASE_URL = import.meta.env.VITE_API_URL || (
+  isProduction 
+    ? 'https://pulmnooon.onrender.com/api' 
+    : 'http://localhost:8001/api'
+);
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -12,9 +18,7 @@ const normalizeAssetUrl = (url) => {
   if (!url) return url;
   try {
     // La URL ya viene absoluta y correcta desde el backend (slices2dUrls / model3dUrl).
-    // Solo le agregamos el parámetro de cache-busting, sin tocar protocolo ni host:
-    // reescribirlos acá pisaba la URL correcta con la de VITE_API_URL si esta
-    // quedaba mal configurada (por ejemplo, con un puerto que no corresponde en Render).
+    // Solo le agregamos el parámetro de cache-busting, sin tocar protocolo ni host.
     const parsed = new URL(url);
     parsed.searchParams.set('v', Date.now().toString());
     return parsed.toString();
