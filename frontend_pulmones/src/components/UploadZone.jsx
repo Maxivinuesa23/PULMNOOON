@@ -10,7 +10,7 @@ export default function UploadZone({ onUploadSuccess }) {
   const fileInputRef = useRef(null);
   const chooseFile = (selectedFile) => {
     setError("");
-    if (!selectedFile?.name.toLowerCase().endsWith(".zip")) {
+    if (!selectedFile?.name || !selectedFile.name.toLowerCase().endsWith(".zip")) {
       setError("Selecciona un archivo .zip que contenga la tomografía DICOM.");
       setFile(null);
       return;

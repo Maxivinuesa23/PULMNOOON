@@ -44,6 +44,7 @@ export default function Dashboard() {
   const [processingError, setProcessingError] = useState("");
   const [geminiState, setGeminiState] = useState("");
   const [showImportantNotice, setShowImportantNotice] = useState(true);
+  const [showServiceNotice, setShowServiceNotice] = useState(true);
   const videoSource = getVideoSource(DEMO_VIDEO_URL);
 
   const handleUploadSuccess = async (responseData) => {
@@ -183,6 +184,21 @@ export default function Dashboard() {
           </section>
         )}
         {activeView === "about" && <AboutProject />}
+        {showServiceNotice && (
+          <aside className="service-limit-popup" role="status" aria-label="Límite de carga">
+            <div className="service-limit-icon"><InformationCircleIcon /></div>
+            <div className="service-limit-content">
+              <strong>Límite de carga del servicio gratuito</strong>
+              <p>
+                Por las limitaciones del hosting gratuito de Supabase, el tamaño máximo recomendado por subida es de <b>50 MB</b>.
+                Para probar la plataforma sin inconvenientes, recomendamos utilizar <b>PRUEBA3.zip</b>.
+              </p>
+            </div>
+            <button type="button" className="service-limit-close" onClick={() => setShowServiceNotice(false)} aria-label="Cerrar aviso">
+              <XMarkIcon />
+            </button>
+          </aside>
+        )}
         {processingError && <div className="error-banner"><ExclamationTriangleIcon /> <span>{processingError}</span><button onClick={() => setProcessingError("")}>Cerrar</button></div>}
         {activeView === "upload" && appState === "processing" && <Loader />}
         {activeView === "upload" && appState === "results" && analysisResults && (

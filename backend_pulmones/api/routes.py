@@ -124,6 +124,13 @@ def process_workflow(task_id: str, file_path: str):
 
 @router.post("/upload")
 async def upload_tomography(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    filename = file.filename or ""
+    if not filename.lower().endswith(".zip") or os.path.basename(filename) != filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se aceptan archivos .zip.",
+        )
+
     cutoff = time.time() - 3600
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -136,13 +143,12 @@ async def upload_tomography(background_tasks: BackgroundTasks, file: UploadFile 
         logger.warning("[UPLOAD] Error limpiando directorio upload: %s", err)
 
     task_id = str(uuid.uuid4())
-    file_extension = os.path.splitext(file.filename or "")[1].lower() or ".zip"
-    file_path = os.path.join(UPLOAD_DIR, f"{task_id}{file_extension}")
+    file_path = os.path.join(UPLOAD_DIR, f"{task_id}.zip")
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    logger.info("[UPLOAD %s] filename=%s guardado=%s bytes=%d", task_id, file.filename, file_path, os.path.getsize(file_path))
+    logger.info("[UPLOAD %s] filename=%s guardado=%s bytes=%d", task_id, filename, file_path, os.path.getsize(file_path))
     storage_key = f"tomografias/{task_id}.zip"
     try:
         await run_in_threadpool(upload_zip, file_path, storage_key)
