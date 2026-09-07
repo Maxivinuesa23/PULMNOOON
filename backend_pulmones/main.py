@@ -30,12 +30,15 @@ app.add_middleware(
 
 app.include_router(router, prefix="/api")
 
+# ... (código anterior igual) ...
+
 @app.get("/")
 def read_root():
     return {"status": "online", "service": "Pulmonary Nodule AI Backend"}
 
-app.mount("/files", StaticFiles(directory=str(OUTPUT_DIR)), name="files")
-
-# Crear carpetas de runtime
+# 1. PRIMERO creas las carpetas de runtime
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# 2. DESPUÉS montas el directorio estático
+app.mount("/files", StaticFiles(directory=str(OUTPUT_DIR)), name="files")
