@@ -13,7 +13,7 @@ app = FastAPI(title="Pulmonary Nodule AI Backend")
 
 # Origenes permitidos sin comodines conflictivos con allow_credentials
 origins = [
-    "https://pulmooon.vercel.app",
+    "https://pulmnooon.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
@@ -21,7 +21,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://pulmooon.*\.vercel\.app",
+    allow_origin_regex=r"https://pulmnooon.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
