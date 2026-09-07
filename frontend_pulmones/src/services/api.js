@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-// Usar la variable de entorno en desarrollo o la API pública de Render.
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://pulmnooon.onrender.com/api';
+// Permitir desarrollo local y producción sin cambiar el código manualmente.
+export const API_BASE_URL = import.meta.env.VITE_API_URL
+  || (import.meta.env.DEV ? 'http://localhost:8001/api' : 'https://pulmnooon.onrender.com/api');
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

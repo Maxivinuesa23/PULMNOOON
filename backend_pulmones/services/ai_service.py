@@ -1,3 +1,4 @@
+import gc
 import logging
 
 import numpy as np
@@ -65,7 +66,7 @@ def run_inference(image_paths: list[str]):
 
         model_input = Image.fromarray((normalized * 255).astype(np.uint8)).resize((64, 64))
         tensor = torch.from_numpy(np.asarray(model_input, dtype=np.float32) / 255).unsqueeze(0).unsqueeze(0).to(device)
-        with torch.inference_mode():
+        with torch.no_grad():
             prediction = modelo_ia(tensor).squeeze().cpu().numpy()
         prediction = np.asarray(Image.fromarray((prediction * 255).astype(np.uint8)).resize(
             (width, height), Image.Resampling.BILINEAR
@@ -138,6 +139,9 @@ def run_inference(image_paths: list[str]):
             draw.rectangle((x1, y1, x2, y2), outline=(255, 40, 40), width=max(2, width // 256))
             draw.text((x1, max(0, y1 - 16)), f"posible anomalia {score * 100:.0f}%", fill=(255, 180, 40))
         image.save(image_path)
+        del tensor, prediction, mask
+
+    gc.collect()
 
     area_mm2 = max_area * 0.7 * 0.7
     stats = {

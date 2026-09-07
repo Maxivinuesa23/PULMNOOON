@@ -1,122 +1,45 @@
-import logging
 import os
 import numpy as np
 import trimesh
-from scipy import ndimage
 from skimage import measure
+import gc
+import logging
 
 logger = logging.getLogger("cancer_detector.mesh")
 
-def _make_surface(mask, spacing):
-    smoothed = ndimage.gaussian_filter(mask.astype(np.float32), sigma=1)
-    # Generar malla usando marching_cubes
-    verts, faces, normals, _ = measure.marching_cubes(
-        smoothed, level=0.5, spacing=spacing, step_size=2
-    )
-    if len(verts) == 0 or len(faces) == 0:
-        # Fallback seguro si la máscara está vacía
-        verts = np.array([[0,0,0], [1,0,0], [0,1,0], [0,0,1]], dtype=float)
-        faces = np.array([[0,1,2]], dtype=int)
-        normals = np.array([[0,0,1]]*3, dtype=float)
-
-    return trimesh.Trimesh(
-        vertices=verts, faces=faces, vertex_normals=normals, process=False
-    )
-
-def generate_3d_mesh(volume_3d: np.ndarray, output_folder: str, detections=None, metadata=None):
-    if volume_3d is None or volume_3d.ndim != 3:
-        raise ValueError("Volumen 3D inválido.")
+def generate_3d_mesh(volume_3d: np.ndarray, output_folder: str, detections: list = None, metadata: dict = None):
+    os.makedirs(output_folder, exist_ok=True)
+    out_path = os.path.join(output_folder, "mesh.glb") # GLB es binario y mucho más ligero
     
-    metadata = metadata or {}
-    spacing_xy = metadata.get("pixel_spacing", [0.7, 0.7])
-    z_positions = metadata.get("slice_positions") or []
-    z_spacing = float(metadata.get("slice_thickness", 2.5))
+    # Reducción espacial previa (paso 2)
+    vol_sub = volume_3d[::2, ::2, ::2]
     
-    if len(z_positions) > 1:
-        z_spacing = float(np.median(np.abs(np.diff(z_positions)))) or z_spacing
-        
-    spacing = (z_spacing, float(spacing_xy[0]), float(spacing_xy[1]))
-    volume = volume_3d.astype(np.float32)
-
-    # 1. Extracción precisa del parénquima pulmonar (rango de aire/tejido blando interno)
-    if metadata.get("is_dicom"):
-        lung_mask = (volume >= -1024) & (volume <= -300)
-    else:
-        v_min = volume.min()
-        values = volume[volume > v_min]
-        cutoff = np.percentile(values, 50) if values.size else v_min
-        lung_mask = (volume > v_min) & (volume <= cutoff)
-
-    labels, count = ndimage.label(lung_mask)
-    if count:
-        sizes = ndimage.sum(lung_mask, labels, range(1, count + 1))
-        # Seleccionar los componentes principais correspondientes a los pulmones
-        valid_labels = np.argsort(sizes)[-2:] + 1
-        lung_mask = np.isin(labels, valid_labels)
-
-    if not np.any(lung_mask):
-        lung_mask = volume > volume.min()  # Fallback de respaldo
-
-    lung = _make_surface(lung_mask, spacing)
-    lung.visual.vertex_colors = [200, 220, 240, 140]  # Translúcido tipo cristal médico
     scene = trimesh.Scene()
-    # Nombre explicito: el frontend lo usa para aplicarle el material de
-    # vidrio SOLO a la superficie pulmonar y dejar los marcadores tal cual
-    # vienen coloreados desde aca (ver MeshViewer.jsx).
-    scene.add_geometry(lung, geom_name="lung_surface", node_name="lung_surface")
+    
+    try:
+        # Parénquima externo con step_size amplio para reducir vértices
+        verts_p, faces_p, _, _ = measure.marching_cubes(vol_sub, level=40, step_size=2)
+        mesh_pulmon = trimesh.Trimesh(vertices=verts_p, faces=faces_p)
+        mesh_pulmon.metadata['name'] = 'pulmon_externo'
+        mesh_pulmon.visual.vertex_colors = [244, 155, 155, 120]
+        scene.add_geometry(mesh_pulmon, node_name="pulmon_externo")
+        del verts_p, faces_p, mesh_pulmon
+    except Exception as e:
+        logger.warning("Error al extraer parénquima 3D: %s", e)
 
-    # Dimensiones de la matriz para escalado de coordenadas de detecciones
-    depth, height, width = volume_3d.shape
+    try:
+        # Árbol bronquial interno
+        verts_b, faces_b, _, _ = measure.marching_cubes(vol_sub, level=110, step_size=2)
+        mesh_bronquios = trimesh.Trimesh(vertices=verts_b, faces=faces_b)
+        mesh_bronquios.metadata['name'] = 'arbol_bronquial'
+        mesh_bronquios.visual.vertex_colors = [217, 107, 107, 255]
+        scene.add_geometry(mesh_bronquios, node_name="arbol_bronquial")
+        del verts_b, faces_b, mesh_bronquios
+    except Exception as e:
+        logger.warning("Error al extraer árbol bronquial 3D: %s", e)
 
-    # 2. Posicionamiento real de anomalías basadas en las coordenadas de la IA
-    for detection in (detections or [])[:15]:
-        try:
-            index = int(detection["slice"])
-            # IMPORTANTE: marching_cubes genero la malla asumiendo espaciado
-            # UNIFORME entre cortes (un solo valor spacing[0]). Si usamos aca
-            # la posicion real del corte (z_positions, que puede no ser
-            # uniforme por cortes faltantes o gaps), el marcador se va
-            # desalineando de la malla a medida que aumenta la profundidad.
-            # Para que el marcador quede siempre en el mismo sistema de
-            # coordenadas que la malla, usamos la misma grilla uniforme.
-            z = index * spacing[0]
+    del vol_sub
+    gc.collect()
 
-            # Mapear coordenadas relativas o absolutas de la caja delimitadora (bounding box)
-            x_min = float(detection["x"])
-            y_min = float(detection["y"])
-            w = float(detection["width"])
-            h = float(detection["height"])
-            
-            # Centro de la detección escalado al espacio físico tridimensional
-            x_center = (x_min + w / 2.0) * spacing[2]
-            y_center = (y_min + h / 2.0) * spacing[1]
-            
-            radius = max(w, h) * spacing[1] * 0.25
-            marker = trimesh.creation.icosphere(subdivisions=2, radius=max(radius, 2.0))
-            
-            # Aplicar traslación exacta en el espacio de Three.js (Z, Y, X)
-            marker.apply_translation((z, y_center, x_center))
-
-            # 3. Color segun la segunda opinion de Gemini y la confianza del
-            # detector, para que la vista 3D refleje que tan seria es cada
-            # marca en vez de mostrar todo con el mismo rojo "confirmado".
-            ruled_out = bool(detection.get("descartado_por_gemini"))
-            if ruled_out:
-                # Gemini determino que esto es vaso/via aerea/artefacto/normal:
-                # se muestra atenuada y gris, visible pero claramente distinta,
-                # nunca oculta del todo (mantiene trazabilidad).
-                marker.visual.vertex_colors = [148, 163, 184, 90]
-            else:
-                score = float(detection.get("score", 50))
-                alpha = int(np.clip(120 + (score / 100.0) * 135, 120, 255))
-                marker.visual.vertex_colors = [239, 68, 68, alpha]  # Rojo clinico
-
-            marker_name = f"anomaly_marker_{index}_{'ruled_out' if ruled_out else 'active'}"
-            scene.add_geometry(marker, geom_name=marker_name, node_name=marker_name)
-        except Exception as e:
-            logger.warning(f"Error procesando una deteccion para el 3D: {e}")
-
-    output_path = os.path.join(output_folder, "mesh.glb")
-    scene.export(output_path, file_type="glb")
-    logger.info("Malla 3D exportada en %s", output_path)
-    return output_path
+    scene.export(out_path)
+    return out_path

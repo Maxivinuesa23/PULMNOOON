@@ -16,7 +16,8 @@ tasks_db = {}
 logger = logging.getLogger("cancer_detector")
 
 # Host publico configurado para Render
-BASE_HOST_URL = os.getenv("BACKEND_URL", "https://pulmnooon.onrender.com").rstrip("/")
+# En local apunta al backend de desarrollo; Render debe definir BACKEND_URL.
+BASE_HOST_URL = os.getenv("BACKEND_URL", "http://localhost:8001").rstrip("/")
 
 def process_workflow(task_id: str, file_path: str):
     tasks_db[task_id] = {"status": "processing"}
