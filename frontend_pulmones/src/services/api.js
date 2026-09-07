@@ -8,14 +8,14 @@ const apiClient = axios.create({
   baseURL: API_BASE_URL,
 });
 
-const API_ORIGIN = new URL(API_BASE_URL).origin;
-
 const normalizeAssetUrl = (url) => {
   if (!url) return url;
   try {
-    const parsed = new URL(url, API_BASE_URL);
-    parsed.protocol = new URL(API_ORIGIN).protocol;
-    parsed.host = new URL(API_ORIGIN).host;
+    // La URL ya viene absoluta y correcta desde el backend (slices2dUrls / model3dUrl).
+    // Solo le agregamos el parámetro de cache-busting, sin tocar protocolo ni host:
+    // reescribirlos acá pisaba la URL correcta con la de VITE_API_URL si esta
+    // quedaba mal configurada (por ejemplo, con un puerto que no corresponde en Render).
+    const parsed = new URL(url);
     parsed.searchParams.set('v', Date.now().toString());
     return parsed.toString();
   } catch {

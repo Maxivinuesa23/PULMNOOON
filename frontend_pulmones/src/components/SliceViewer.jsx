@@ -1,7 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+
+/**
+ * Cola simple de concurrencia limitada para la precarga de vecinos.
+ * Nunca dispara más de `maxConcurrent` descargas de imagen al mismo tiempo.
+ */
+function createLimitedPreloader(maxConcurrent = 4) {
+  let active = 0;
+  const queue = [];
+  const seen = new Set(); // evita re-precargar la misma URL varias veces
+
+  const runNext = () => {
+    if (active >= maxConcurrent || queue.length === 0) return;
+    active++;
+    const url = queue.shift();
+
+    const img = new Image();
+    const done = () => {
+      active--;
+      runNext();
+    };
+    img.onload = done;
+    img.onerror = done;
+    img.src = url;
+  };
+
+  return function preload(url) {
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    queue.push(url);
+    runNext();
+  };
+}
 
 export default function SliceViewer({ slices = [] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const preloaderRef = useRef(createLimitedPreloader(4));
+
+  // Precarga silenciosa: el corte actual + 2 antes + 2 después.
+  // No cambia lo que se ve (sigue siendo un solo <img>), solo hace que
+  // moverse por el slider se sienta instantáneo porque la imagen ya
+  // suele estar en la caché del navegador cuando el usuario llega a ella.
+  useEffect(() => {
+    if (!slices || slices.length === 0) return;
+    const window = 2;
+    for (let offset = -window; offset <= window; offset++) {
+      const i = currentIndex + offset;
+      if (i >= 0 && i < slices.length) {
+        preloaderRef.current(slices[i]);
+      }
+    }
+  }, [currentIndex, slices]);
 
   if (!slices || slices.length === 0) {
     return (
@@ -35,7 +83,7 @@ export default function SliceViewer({ slices = [] }) {
             error,
           })}
         />
-        
+
         {/* HUD Overlays */}
         <div className="absolute top-4 right-4 text-emerald-400 font-mono text-sm bg-black/60 backdrop-blur-sm px-3 py-1 rounded-md border border-emerald-500/30 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -54,7 +102,7 @@ export default function SliceViewer({ slices = [] }) {
             Corte {currentIndex + 1} / {slices.length}
           </span>
         </div>
-        
+
         <div className="relative w-full flex items-center">
           <input
             type="range"
