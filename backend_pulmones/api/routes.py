@@ -70,8 +70,14 @@ def process_workflow(task_id: str, file_path: str):
             
         logger.info("[TAREA %s] Malla=%s existe=%s", task_id, mesh_path, os.path.exists(mesh_path))
 
+        # Los cortes 2D se sirven como archivos estaticos (mount /files en main.py):
+        # es mucho mas liviano para el servidor que pasar por un endpoint de FastAPI
+        # por cada una de las N imagenes, algo critico en el plan Free de Render.
+        base_static_url = f"{BASE_HOST_URL}/files/{task_id}"
+        slices_urls = [f"{base_static_url}/{fname}" for fname in slice_filenames]
+
+        # La malla 3D sigue viajando por /api/download (un solo archivo, no hay problema de concurrencia)
         base_download_url = f"{BASE_HOST_URL}/api/download/{task_id}"
-        slices_urls = [f"{base_download_url}/{fname}" for fname in slice_filenames]
         model_3d_url = f"{base_download_url}/{model_filename}" if os.path.exists(mesh_path) else None
         
         tasks_db[task_id] = {

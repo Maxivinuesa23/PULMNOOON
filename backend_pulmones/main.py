@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from core.config import UPLOAD_DIR, OUTPUT_DIR
+from fastapi.staticfiles import StaticFiles
 import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -32,6 +33,8 @@ app.include_router(router, prefix="/api")
 @app.get("/")
 def read_root():
     return {"status": "online", "service": "Pulmonary Nodule AI Backend"}
+
+app.mount("/files", StaticFiles(directory=str(OUTPUT_DIR)), name="files")
 
 # Crear carpetas de runtime
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

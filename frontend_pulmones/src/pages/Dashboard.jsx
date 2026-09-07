@@ -18,7 +18,7 @@ import Loader from "../components/Loader";
 import { checkTaskStatus } from "../services/api";
 
 const TEST_STUDIES_DRIVE_URL = "https://drive.google.com/drive/folders/1PBv0RC5Oi2tIJw9jJRUxej-6y_DTaQlc?usp=sharing";
-const DEMO_VIDEO_URL = "https://youtu.be/zNWA8YczCC8?si=A_AbSrechom3vk6Q";
+const DEMO_VIDEO_URL = "https://youtu.be/lOLhE6efY6k?si=D3lP3RepBJhf0r42";
 
 function getVideoSource(url) {
   if (!url || url.includes("REEMPLAZAR")) return null;
@@ -157,7 +157,7 @@ export default function Dashboard() {
                 <span className="resource-card-content">
                   <strong>Cómo funciona PulmoScan</strong>
                   <span>Video corto con el paso a paso para cargar y revisar un estudio.</span>
-                  <small>https://youtu.be/bnxEr2vKbsc?si=kRDOoTKiRwf9qH1<span>↗</span></small>
+                  <small>https://youtu.be/lOLhE6efY6k?si=D3lP3RepBJhf0r42<span>↗</span></small>
                 </span>
               </a>
             </div>
