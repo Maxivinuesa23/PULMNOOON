@@ -1,0 +1,3 @@
+backend_pulmones/.env
+backend_pulmones/.env.*
+!backend_pulmones/.env.example

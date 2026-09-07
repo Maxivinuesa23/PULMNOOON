@@ -1,5 +1,8 @@
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import APIRouter, UploadFile, File, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 import shutil
 import os
 import uuid
@@ -9,11 +12,21 @@ from services.image_service import process_tomography_zip
 from services.ai_service import run_inference
 from services.mesh_service import generate_3d_mesh
 from services.gemini_service import build_conclusion, verify_detections, apply_second_opinion
+from services.storage_service import upload_zip
 from core.config import UPLOAD_DIR, OUTPUT_DIR
+from core.database import get_db
+from core.models import Examen
 
 router = APIRouter()
 tasks_db = {}
 logger = logging.getLogger("cancer_detector")
+
+
+@router.get("/exams")
+async def list_exams(db: AsyncSession = Depends(get_db)):
+    """Example route showing async session injection."""
+    result = await db.execute(select(Examen).order_by(Examen.fecha.desc()))
+    return result.scalars().all()
 
 # Host publico configurado para Render (con respaldo automático si no se define la variable)
 DEFAULT_RENDER_URL = "https://pulmnooon.onrender.com"
@@ -130,13 +143,25 @@ async def upload_tomography(background_tasks: BackgroundTasks, file: UploadFile 
         shutil.copyfileobj(file.file, buffer)
         
     logger.info("[UPLOAD %s] filename=%s guardado=%s bytes=%d", task_id, file.filename, file_path, os.path.getsize(file_path))
+    storage_key = f"tomografias/{task_id}.zip"
+    try:
+        await run_in_threadpool(upload_zip, file_path, storage_key)
+        logger.info("[UPLOAD %s] ZIP subido a Supabase Storage: %s", task_id, storage_key)
+    except Exception as err:
+        logger.exception("[UPLOAD %s] No se pudo subir el ZIP a Supabase Storage", task_id)
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudo guardar el archivo en Supabase Storage.",
+        ) from err
+
     background_tasks.add_task(process_workflow, task_id, file_path)
     
     return {
         "status": "success",
         "message": "Archivo recibido correctamente.",
         "task_id": task_id,
-        "filename": file.filename
+        "filename": file.filename,
+        "storage_key": storage_key,
     }
 
 @router.get("/status/{task_id}")
